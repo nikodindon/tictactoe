@@ -1,0 +1,982 @@
+/**
+ * Morpion Ultime - Logique du jeu (V5)
+ * Version web : Tic-Tac-Toe 3x3 avec IA, scores, confettis, sons & stats
+ *
+ * Nouvelles fonctionnalités V5 :
+ *   - Statistiques détaillées (victoires, %s, win streak, perf IA)
+ *   - Toggle de thème (Cyber / Neon Retro)
+ *   - IA améliorée en niveau Moyen (bloque les menaces du joueur)
+ */
+
+// ============================================================
+// Constantes
+// ============================================================
+
+/** Combinaisons gagnantes (indices de la grille 3x3) */
+const WINNING_COMBOS = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+];
+
+/** Scores du Minimax */
+const SCORE = {
+    AI_WIN: 10,
+    HUMAN_WIN: -10,
+    DRAW: 0,
+};
+
+/** Taux d'erreur par difficulté */
+const ERROR_RATE = {
+    easy: 0.80,
+    medium: 0.50,
+    hard: 0.00,
+};
+
+/** Clés localStorage pour la persistance */
+const SCORES_KEY = "morpion_ultime_scores_v5";
+const STATS_KEY = "morpion_ultime_stats_v5";
+const THEME_KEY = "morpion_ultime_theme_v5";
+
+// ============================================================
+// État du jeu
+// ============================================================
+
+let board = Array(9).fill("");
+let currentPlayer = "X";
+let gameActive = false;
+let gameMode = "";
+let difficulty = "hard";
+let soundEnabled = true;
+
+/** Scores persistants (sauvegardés dans localStorage) */
+let scores = { x: 0, o: 0, draw: 0 };
+
+/** Statistiques détaillées persistantes */
+let stats = {
+    totalGames: 0,          // Nombre total de parties jouées
+    winStreak: 0,           // Série de victoires actuelle
+    bestWinStreak: 0,       // Meilleure série de victoires
+    aiByDiff: {             // Performance contre l'IA par difficulté
+        easy:   { games: 0, wins: 0 },
+        medium: { games: 0, wins: 0 },
+        hard:   { games: 0, wins: 0 },
+    },
+};
+
+// Timers
+let difficultyTimer = null;
+
+// ============================================================
+// Éléments du DOM
+// ============================================================
+
+const modeSelectScreen = document.getElementById("modeSelectScreen");
+const gameContainer    = document.getElementById("gameContainer");
+
+const btn2Players = document.getElementById("btn2Players");
+const btnVsAI     = document.getElementById("btnVsAI");
+const modeToggle  = document.getElementById("modeToggle");
+
+const difficultySelector = document.getElementById("difficultySelector");
+const difficultyIndicator = document.getElementById("difficultyIndicator");
+const diffLabel           = document.getElementById("diffLabel");
+const btnEasy = document.getElementById("btnEasy");
+const btnMedium = document.getElementById("btnMedium");
+const btnHard = document.getElementById("btnHard");
+
+const scoreX = document.getElementById("scoreX");
+const scoreO = document.getElementById("scoreO");
+const scoreDraw = document.getElementById("scoreDraw");
+
+const modalOverlay = document.getElementById("modalOverlay");
+const btnCancelMode = document.getElementById("btnCancelMode");
+const btnConfirmMode = document.getElementById("btnConfirmMode");
+
+const resetModalOverlay = document.getElementById("resetModalOverlay");
+const btnCancelReset = document.getElementById("btnCancelReset");
+const btnConfirmReset  = document.getElementById("btnConfirmReset");
+const resetBtn = document.getElementById("resetBtn");
+
+const soundToggle = document.getElementById("soundToggle");
+const themeToggle = document.getElementById("themeToggle");
+
+const statusBar    = document.getElementById("statusBar");
+const currentSymbol = document.getElementById("currentSymbol");
+const resultMessage = document.getElementById("resultMessage");
+const restartBtn   = document.getElementById("restartBtn");
+const cells        = document.querySelectorAll(".cell");
+
+const confettiContainer = document.getElementById("confettiContainer");
+
+// --- Modal Stats ---
+const statsModalOverlay = document.getElementById("statsModalOverlay");
+const btnCloseStats     = document.getElementById("btnCloseStats");
+const statsBtn          = document.getElementById("statsBtn");
+
+// --- Éléments de stats ---
+const statsTotal   = document.getElementById("statsTotal");
+const barX         = document.getElementById("barX");
+const barO         = document.getElementById("barO");
+const barDraw      = document.getElementById("barDraw");
+const valX         = document.getElementById("valX");
+const valO         = document.getElementById("valO");
+const valDraw      = document.getElementById("valDraw");
+const statsStreak  = document.getElementById("statsStreak");
+const statsAISec   = document.getElementById("statsAISec");
+const aiEasyWins   = document.getElementById("aiEasyWins");
+const aiMediumWins = document.getElementById("aiMediumWins");
+const aiHardWins   = document.getElementById("aiHardWins");
+const aiEasyRate   = document.getElementById("aiEasyRate");
+const aiMediumRate = document.getElementById("aiMediumRate");
+const aiHardRate   = document.getElementById("aiHardRate");
+
+// ============================================================
+// Fonctions : Persistance localStorage
+// ============================================================
+
+/** Charge les scores depuis localStorage */
+function loadScores() {
+    try {
+        const data = localStorage.getItem(SCORES_KEY);
+        if (data) scores = JSON.parse(data);
+    } catch (e) {
+        console.warn("Impossible de charger les scores", e);
+    }
+}
+
+/** Sauvegarde les scores dans localStorage */
+function saveScores() {
+    try {
+        localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+    } catch (e) {
+        console.warn("Impossible de sauvegarder les scores", e);
+    }
+}
+
+/** Charge les statistiques détaillées */
+function loadStats() {
+    try {
+        const data = localStorage.getItem(STATS_KEY);
+        if (data) stats = JSON.parse(data);
+    } catch (e) {
+        console.warn("Impossible de charger les stats", e);
+    }
+}
+
+/** Sauvegarde les statistiques détaillées */
+function saveStats() {
+    try {
+        localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    } catch (e) {
+        console.warn("Impossible de sauvegarder les stats", e);
+    }
+}
+
+/** Charge le thème depuis localStorage */
+function loadTheme() {
+    try {
+        const theme = localStorage.getItem(THEME_KEY);
+        if (theme === "neon") {
+            document.body.classList.add("theme-neon");
+            themeToggle.classList.add("active-neon");
+        }
+    } catch (e) {
+        console.warn("Impossible de charger le thème", e);
+    }
+}
+
+/** Sauvegarde le thème dans localStorage */
+function saveTheme(theme) {
+    try {
+        localStorage.setItem(THEME_KEY, theme);
+    } catch (e) {
+        console.warn("Impossible de sauvegarder le thème", e);
+    }
+}
+
+// ============================================================
+// Fonctions : Son
+// ============================================================
+
+/**
+ * Joue un son court via l'API Web Audio.
+ * @param {string} type - "click", "win", "lose", "draw"
+ */
+function playSound(type) {
+    if (!soundEnabled) return;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    switch (type) {
+        case "click": {
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.08);
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.08);
+            break;
+        }
+        case "win": {
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(523, audioCtx.currentTime);
+            oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
+            oscillator.frequency.setValueAtTime(784, audioCtx.currentTime + 0.2);
+            oscillator.frequency.setValueAtTime(1047, audioCtx.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.5);
+            break;
+        }
+        case "lose": {
+            oscillator.type = "sawtooth";
+            oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+            oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.15);
+            oscillator.frequency.setValueAtTime(200, audioCtx.currentTime + 0.3);
+            oscillator.frequency.setValueAtTime(150, audioCtx.currentTime + 0.45);
+            gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.6);
+            break;
+        }
+        case "draw": {
+            oscillator.type = "triangle";
+            oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+            oscillator.frequency.setValueAtTime(440, audioCtx.currentTime + 0.2);
+            gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.4);
+            break;
+        }
+    }
+}
+
+/** Bascule l'état du son et met à jour l'icône */
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    soundToggle.textContent = soundEnabled ? "🔊" : "🔇";
+    soundToggle.classList.toggle("muted", !soundEnabled);
+}
+
+// ============================================================
+// Fonctions : Thème
+// ============================================================
+
+/** Bascule entre le thème Cyber et Neon Retro */
+function toggleTheme() {
+    const isNeon = document.body.classList.toggle("theme-neon");
+    themeToggle.classList.toggle("active-neon", isNeon);
+    saveTheme(isNeon ? "neon" : "cyber");
+    playSound("click");
+}
+
+// ============================================================
+// Fonctions : Confettis
+// ============================================================
+
+/**
+ * Lance une animation de confettis colorés.
+ * @param {number} count - Nombre de confettis (défaut: 60)
+ */
+function launchConfetti(count = 60) {
+    const colors = [
+        "#667eea", "#f093fb", "#f5a623", "#64c864",
+        "#f06464", "#66ccff", "#ffdd57", "#c084fc",
+    ];
+
+    for (let i = 0; i < count; i++) {
+        const piece = document.createElement("div");
+        piece.classList.add("confetti-piece");
+
+        const left    = Math.random() * 100;
+        const color   = colors[Math.floor(Math.random() * colors.length)];
+        const size    = Math.random() * 8 + 5;
+        const duration = Math.random() * 2 + 1.5;
+        const rotation = (Math.random() * 720 - 360) + "deg";
+        const delay    = Math.random() * 0.5;
+
+        piece.style.left = left + "%";
+        piece.style.backgroundColor = color;
+        piece.style.width = size + "px";
+        piece.style.height = size + "px";
+        piece.style.borderRadius = Math.random() > 0.5 ? "50%" : "2px";
+        piece.style.setProperty("--fall-duration", duration + "s");
+        piece.style.setProperty("--rotation", rotation);
+        piece.style.setProperty("--delay", delay + "s");
+
+        confettiContainer.appendChild(piece);
+
+        setTimeout(() => {
+            piece.classList.add("falling");
+        }, delay * 1000);
+
+        setTimeout(() => {
+            if (piece.parentNode) piece.parentNode.removeChild(piece);
+        }, (delay + duration) * 1000 + 200);
+    }
+}
+
+// ============================================================
+// Fonctions : Écran de sélection de mode
+// ============================================================
+
+function showModeSelection() {
+    modeSelectScreen.style.display = "block";
+    gameContainer.style.display = "none";
+}
+
+function hideModeSelection() {
+    modeSelectScreen.style.display = "none";
+    gameContainer.style.display = "block";
+}
+
+/** Initialise le jeu avec le mode sélectionné */
+function startGame(mode) {
+    gameMode = mode;
+    gameActive = true;
+    currentPlayer = "X";
+
+    updateDifficultyVisibility();
+    hideModeSelection();
+    initGame();
+}
+
+// ============================================================
+// Fonctions : Modal de confirmation
+// ============================================================
+
+function showModal() {
+    modalOverlay.style.display = "flex";
+}
+
+function hideModal() {
+    modalOverlay.style.display = "none";
+}
+
+/** Change de mode avec confirmation. Les scores NE sont PAS réinitialisés. */
+function switchMode(newMode) {
+    hideModal();
+    gameMode = newMode;
+
+    board = Array(9).fill("");
+    currentPlayer = "X";
+    gameActive = true;
+
+    cells.forEach((cell) => {
+        cell.textContent = "";
+        cell.classList.remove("taken", "winner");
+        const symbolSpan = cell.querySelector(".symbol-x, .symbol-o");
+        if (symbolSpan) symbolSpan.remove();
+    });
+
+    resultMessage.classList.remove("show");
+    resultMessage.innerHTML = "";
+    restartBtn.style.display = "none";
+
+    updateDifficultyVisibility();
+    updatePlayerIndicator();
+    updateDifficultyUI();
+}
+
+// ============================================================
+// Fonctions : Scores
+// ============================================================
+
+function updateScoreDisplay() {
+    scoreX.textContent = scores.x;
+    scoreO.textContent = scores.o;
+    scoreDraw.textContent = scores.draw;
+}
+
+/** Incrémente le score et sauvegarde dans localStorage */
+function incrementScore(result) {
+    if (result === "x") scores.x++;
+    else if (result === "o") scores.o++;
+    else scores.draw++;
+
+    updateScoreDisplay();
+    saveScores();
+}
+
+// ============================================================
+// Fonctions : Statistiques détaillées
+// ============================================================
+
+/**
+ * Enregistre la fin d'une partie dans les statistiques.
+ * @param {string|null} result - "x", "o", ou null (nul)
+ */
+function recordGameResult(result) {
+    stats.totalGames++;
+
+    if (gameMode === "AI") {
+        // Mise à jour des stats IA par difficulté
+        const diff = stats.aiByDiff[difficulty];
+        diff.games++;
+
+        if (result === "x") {
+            diff.wins++;
+            // Le joueur a gagné → augmente la win streak
+            stats.winStreak++;
+            if (stats.winStreak > stats.bestWinStreak) {
+                stats.bestWinStreak = stats.winStreak;
+            }
+        } else {
+            // L'IA a gagné ou match nul → reset la win streak
+            stats.winStreak = 0;
+        }
+    } else {
+        // Mode 2 joueurs : simple win streak global
+        if (result === "x" || result === "o") {
+            stats.winStreak++;
+            if (stats.winStreak > stats.bestWinStreak) {
+                stats.bestWinStreak = stats.winStreak;
+            }
+        } else {
+            stats.winStreak = 0;
+        }
+    }
+
+    saveStats();
+}
+
+/** Ouvre le modal statistiques et affiche les données */
+function openStatsModal() {
+    updateStatsDisplay();
+    statsModalOverlay.style.display = "flex";
+    playSound("click");
+}
+
+/** Ferme le modal statistiques */
+function closeStatsModal() {
+    statsModalOverlay.style.display = "none";
+}
+
+/** Met à jour l'affichage des statistiques dans le modal */
+function updateStatsDisplay() {
+    // Total des parties
+    statsTotal.textContent = stats.totalGames;
+
+    const total = scores.x + scores.o + scores.draw || 1;
+
+    // Barres de résultats avec pourcentages
+    const xPct  = Math.round((scores.x / total) * 100);
+    const oPct  = Math.round((scores.o / total) * 100);
+    const drawPct = Math.round((scores.draw / total) * 100);
+
+    barX.style.width  = xPct + "%";
+    barO.style.width  = oPct + "%";
+    barDraw.style.width = drawPct + "%";
+
+    valX.textContent  = scores.x + " (" + xPct + "%)";
+    valO.textContent  = scores.o + " (" + oPct + "%)";
+    valDraw.textContent = scores.draw + " (" + drawPct + "%)";
+
+    // Meille série
+    statsStreak.innerHTML = `
+        <span class="streak-value">${stats.bestWinStreak}</span>
+        <span class="streak-label">victoires d'affilée</span>
+    `;
+
+    // Stats IA par difficulté
+    if (gameMode === "AI" || stats.aiByDiff.easy.games > 0) {
+        statsAISec.style.display = "block";
+    } else {
+        statsAISec.style.display = "none";
+    }
+
+    const easy = stats.aiByDiff.easy;
+    const medium = stats.aiByDiff.medium;
+    const hard = stats.aiByDiff.hard;
+
+    aiEasyWins.textContent  = easy.wins;
+    aiMediumWins.textContent = medium.wins;
+    aiHardWins.textContent   = hard.wins;
+
+    aiEasyRate.textContent  = easy.games > 0 ? Math.round((easy.wins / easy.games) * 100) + "%" : "N/A";
+    aiMediumRate.textContent = medium.games > 0 ? Math.round((medium.wins / medium.games) * 100) + "%" : "N/A";
+    aiHardRate.textContent   = hard.games > 0 ? Math.round((hard.wins / hard.games) * 100) + "%" : "N/A";
+}
+
+// ============================================================
+// Fonctions : Difficulté
+// ============================================================
+
+function updateDifficultyUI() {
+    document.querySelectorAll(".diff-btn").forEach((btn) => {
+        btn.classList.remove("active");
+    });
+    const activeBtn = document.querySelector(`.diff-btn[data-diff="${difficulty}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+}
+
+/**
+ * Affiche un message temporaire de changement de niveau
+ */
+function showDifficultyMessage(newDiff) {
+    const names = {
+        easy: "😊 Facile",
+        medium: "🤔 Moyen",
+        hard: "💀 Imbattable",
+    };
+
+    if (difficultyTimer) clearTimeout(difficultyTimer);
+
+    diffLabel.textContent = "Niveau : " + names[newDiff];
+    diffLabel.className = "diff-label " + newDiff;
+    difficultyIndicator.classList.add("show");
+
+    difficultyTimer = setTimeout(() => {
+        difficultyIndicator.classList.remove("show");
+        difficultyTimer = null;
+    }, 1500);
+}
+
+function setDifficulty(newDiff) {
+    if (newDiff === difficulty) return;
+    difficulty = newDiff;
+    updateDifficultyUI();
+    showDifficultyMessage(newDiff);
+    initGame();
+}
+
+// ============================================================
+// Fonctions : Visibilité du sélecteur de difficulté
+// ============================================================
+
+function updateDifficultyVisibility() {
+    if (gameMode === "AI") {
+        difficultySelector.style.display = "flex";
+    } else {
+        difficultySelector.style.display = "none";
+    }
+}
+
+// ============================================================
+// Fonctions : Gestion du jeu
+// ============================================================
+
+function initGame() {
+    board = Array(9).fill("");
+    currentPlayer = "X";
+    gameActive = true;
+
+    cells.forEach((cell) => {
+        cell.textContent = "";
+        cell.classList.remove("taken", "winner");
+        const symbolSpan = cell.querySelector(".symbol-x, .symbol-o");
+        if (symbolSpan) symbolSpan.remove();
+    });
+
+    resultMessage.classList.remove("show");
+    resultMessage.innerHTML = "";
+    restartBtn.style.display = "none";
+
+    updatePlayerIndicator();
+    updateDifficultyUI();
+}
+
+/**
+ * Gère le clic sur une cellule
+ */
+function handleCellClick(cell, index) {
+    if (board[index] !== "" || !gameActive) return;
+
+    if (gameMode === "AI" && currentPlayer === "O") return;
+
+    playSound("click");
+
+    board[index] = currentPlayer;
+    placeSymbol(cell, currentPlayer);
+    cell.classList.add("taken");
+
+    const winResult = checkWinner();
+    if (winResult) {
+        endGame(winResult);
+        return;
+    }
+
+    if (checkDraw()) {
+        endGame(null);
+        return;
+    }
+
+    currentPlayer = currentPlayer === "X" ? "O" : "X";
+    updatePlayerIndicator();
+
+    if (gameMode === "AI" && currentPlayer === "O") {
+        setTimeout(makeAIMove, 400);
+    }
+}
+
+function placeSymbol(cell, symbol) {
+    const span = document.createElement("span");
+    span.classList.add(symbol === "X" ? "symbol-x" : "symbol-o");
+    span.textContent = symbol;
+    cell.appendChild(span);
+}
+
+function updatePlayerIndicator() {
+    currentSymbol.textContent = currentPlayer;
+
+    if (currentPlayer === "O") {
+        currentSymbol.classList.add("o-player");
+    } else {
+        currentSymbol.classList.remove("o-player");
+    }
+}
+
+// ============================================================
+// Fonctions : IA et Minimax
+// ============================================================
+
+/**
+ * Détermine le meilleur coup pour l'IA selon la difficulté.
+ * En niveau Moyen, l'IA détecte parfois les menaces immédiates
+ * du joueur (2 signes alignés) et les bloque.
+ */
+function getBestMove() {
+    const available = [];
+    for (let i = 0; i < 9; i++) {
+        if (board[i] === "") available.push(i);
+    }
+
+    if (available.length === 0) return null;
+
+    if (difficulty === "hard") {
+        return getBestMoveMinimax();
+    }
+
+    // En niveau Medium : l'IA peut parfois bloquer les menaces
+    // du joueur au lieu de jouer aléatoirement.
+    if (difficulty === "medium") {
+        // Vérifier si le joueur est sur le point de gagner
+        const blockMove = findBlockingMove();
+        if (blockMove !== null && Math.random() < 0.65) {
+            // 65% de chance de bloquer au lieu de jouer aléatoire
+            return blockMove;
+        }
+    }
+
+    // Comportement aléatoire avec probabilité d'erreur
+    if (Math.random() < ERROR_RATE[difficulty]) {
+        return getRandomMove(available);
+    }
+
+    return getBestMoveMinimax();
+}
+
+/**
+ * Trouve une cellule où bloquer le joueur pour l'empêcher de gagner.
+ * Scanne toutes les combinaisons gagnantes et trouve celle où
+ * le joueur a 2 signes et la 3ème case est vide.
+ * @returns {number|null} Index à bloquer ou null
+ */
+function findBlockingMove() {
+    for (const combo of WINNING_COMBOS) {
+        const [a, b, c] = combo;
+        const cellsCombo = [board[a], board[b], board[c]];
+
+        // Compter les signes du joueur (X) et les cases vides
+        const xCount = cellsCombo.filter((v) => v === "X").length;
+        const emptyCount = cellsCombo.filter((v) => v === "").length;
+
+        if (xCount === 2 && emptyCount === 1) {
+            // Trouver la case vide et la retourner
+            if (board[a] === "") return a;
+            if (board[b] === "") return b;
+            if (board[c] === "") return c;
+        }
+    }
+    return null;
+}
+
+function makeAIMove() {
+    if (!gameActive) return;
+
+    const bestMove = getBestMove();
+
+    if (bestMove !== null) {
+        const cell = cells[bestMove];
+        board[bestMove] = "O";
+        placeSymbol(cell, "O");
+        cell.classList.add("taken");
+
+        playSound("click");
+
+        const winResult = checkWinner();
+        if (winResult) {
+            endGame(winResult);
+            return;
+        }
+
+        if (checkDraw()) {
+            endGame(null);
+            return;
+        }
+
+        currentPlayer = "X";
+        updatePlayerIndicator();
+    }
+}
+
+function getBestMoveMinimax() {
+    let bestScore = -Infinity;
+    let bestMove = null;
+
+    for (let i = 0; i < 9; i++) {
+        if (board[i] === "") {
+            board[i] = "O";
+            const score = minimax(board, 0, false);
+            board[i] = "";
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = i;
+            }
+        }
+    }
+
+    return bestMove;
+}
+
+function getRandomMove(available) {
+    return available[Math.floor(Math.random() * available.length)];
+}
+
+/**
+ * Algorithme Minimax récursif.
+ * L'IA (O) maximise, l'humain (X) minimise.
+ */
+function minimax(boardState, depth, isMaximizing) {
+    const winner = getWinner(boardState);
+
+    if (winner === "O") return SCORE.AI_WIN;
+    if (winner === "X") return SCORE.HUMAN_WIN;
+    if (isBoardFull(boardState)) return SCORE.DRAW;
+
+    if (isMaximizing) {
+        let maxScore = -Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (boardState[i] === "") {
+                boardState[i] = "O";
+                const score = minimax(boardState, depth + 1, false);
+                boardState[i] = "";
+                maxScore = Math.max(score, maxScore);
+            }
+        }
+        return maxScore;
+    } else {
+        let minScore = Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (boardState[i] === "") {
+                boardState[i] = "X";
+                const score = minimax(boardState, depth + 1, true);
+                boardState[i] = "";
+                minScore = Math.min(score, minScore);
+            }
+        }
+        return minScore;
+    }
+}
+
+function getWinner(boardState) {
+    for (const [a, b, c] of WINNING_COMBOS) {
+        if (
+            boardState[a] !== "" &&
+            boardState[a] === boardState[b] &&
+            boardState[a] === boardState[c]
+        ) {
+            return boardState[a];
+        }
+    }
+    return null;
+}
+
+function isBoardFull(boardState) {
+    return boardState.every((cell) => cell !== "");
+}
+
+// ============================================================
+// Fonctions : Fin de partie
+// ============================================================
+
+function checkWinner() {
+    for (const combo of WINNING_COMBOS) {
+        const [a, b, c] = combo;
+        if (
+            board[a] !== "" &&
+            board[a] === board[b] &&
+            board[a] === board[c]
+        ) {
+            return { winner: board[a], combo };
+        }
+    }
+    return null;
+}
+
+function checkDraw() {
+    return board.every((cell) => cell !== "");
+}
+
+/** Termine la partie avec animations, sons et statistiques */
+function endGame(winResult) {
+    gameActive = false;
+
+    if (winResult) {
+        const { winner, combo } = winResult;
+        highlightWinningCells(combo);
+        incrementScore(winner === "X" ? "x" : "o");
+
+        if (winner === "X") {
+            playSound("win");
+            if (gameMode === "AI" && difficulty !== "easy") {
+                launchConfetti(80);
+            }
+        } else {
+            playSound("lose");
+        }
+
+        // Message de résultat
+        if (gameMode === "AI") {
+            if (winner === "X") {
+                let msg = "🎉 Tu as battu l'IA ! Impressionnant !";
+                if (difficulty === "easy") msg = "😊 Pas trop mal, mais c'était le niveau Facile !";
+                if (difficulty === "medium") msg = "🏆 Bravo ! Tu as battu l'IA en niveau Moyen !";
+                if (difficulty === "hard") msg = "👑 LÉGENDAIRE ! Tu as battu l'IA en niveau Imbattable !";
+                resultMessage.innerHTML = `<span class="winner-text">${msg}</span>`;
+            } else {
+                let msg = "🤖 L'IA a gagné !";
+                if (difficulty === "easy") msg = "😄 L'IA a gagné, mais c'était facile… Courage !";
+                if (difficulty === "medium") msg = "🤖 L'IA a gagné en niveau Moyen ! Tu peux faire mieux !";
+                if (difficulty === "hard") msg = "🤖 Impossible ! L'IA est imbattable sur ce niveau…";
+                resultMessage.innerHTML = `<span class="winner-text o-winner">${msg}</span>`;
+            }
+        } else {
+            resultMessage.innerHTML = `
+                <span class="winner-text ${winner === "O" ? "o-winner" : ""}">
+                    🏆 Le joueur ${winner} a gagné !
+                </span>`;
+        }
+    } else {
+        incrementScore("draw");
+        playSound("draw");
+        resultMessage.innerHTML = `<span class="draw-text">🤝 Match nul !</span>`;
+    }
+
+    resultMessage.classList.add("show");
+    restartBtn.style.display = "inline-block";
+
+    // Enregistrer la partie dans les statistiques
+    recordGameResult(winResult ? (winResult.winner === "X" ? "x" : "o") : null);
+}
+
+function highlightWinningCells(combo) {
+    combo.forEach((index) => {
+        cells[index].classList.add("winner");
+    });
+}
+
+// ============================================================
+// Event Listeners
+// ============================================================
+
+// --- Sélection du mode ---
+btn2Players.addEventListener("click", () => startGame("2P"));
+btnVsAI.addEventListener("click", () => startGame("AI"));
+
+// --- Cellules du jeu ---
+cells.forEach((cell, index) => {
+    cell.addEventListener("click", () => handleCellClick(cell, index));
+});
+
+// --- Rejouer ---
+restartBtn.addEventListener("click", initGame);
+
+// --- Modal changement de mode ---
+modeToggle.addEventListener("click", showModal);
+btnCancelMode.addEventListener("click", hideModal);
+btnConfirmMode.addEventListener("click", () => {
+    const newMode = gameMode === "2P" ? "AI" : "2P";
+    switchMode(newMode);
+});
+modalOverlay.addEventListener("click", (e) => {
+    if (e.target === modalOverlay) hideModal();
+});
+
+// --- Reset des scores ---
+resetBtn.addEventListener("click", () => {
+    resetModalOverlay.style.display = "flex";
+});
+
+btnCancelReset.addEventListener("click", () => {
+    resetModalOverlay.style.display = "none";
+});
+
+btnConfirmReset.addEventListener("click", () => {
+    // Réinitialiser scores + statistiques
+    scores = { x: 0, o: 0, draw: 0 };
+    stats = {
+        totalGames: 0,
+        winStreak: 0,
+        bestWinStreak: 0,
+        aiByDiff: {
+            easy:   { games: 0, wins: 0 },
+            medium: { games: 0, wins: 0 },
+            hard:   { games: 0, wins: 0 },
+        },
+    };
+    saveScores();
+    saveStats();
+    updateScoreDisplay();
+    resetModalOverlay.style.display = "none";
+    playSound("click");
+});
+
+resetModalOverlay.addEventListener("click", (e) => {
+    if (e.target === resetModalOverlay) {
+        resetModalOverlay.style.display = "none";
+    }
+});
+
+// --- Toggle son ---
+soundToggle.addEventListener("click", toggleSound);
+
+// --- Toggle thème ---
+themeToggle.addEventListener("click", toggleTheme);
+
+// --- Modal Statistiques ---
+statsBtn.addEventListener("click", openStatsModal);
+btnCloseStats.addEventListener("click", closeStatsModal);
+statsModalOverlay.addEventListener("click", (e) => {
+    if (e.target === statsModalOverlay) closeStatsModal();
+});
+
+// --- Difficulté ---
+btnEasy.addEventListener("click", () => setDifficulty("easy"));
+btnMedium.addEventListener("click", () => setDifficulty("medium"));
+btnHard.addEventListener("click", () => setDifficulty("hard"));
+
+// ============================================================
+// Initialisation
+// ============================================================
+
+loadScores();       // Charger les scores
+loadStats();        // Charger les statistiques
+loadTheme();        // Charger le thème
+updateScoreDisplay(); // Afficher les scores
+showModeSelection();  // Écran de sélection

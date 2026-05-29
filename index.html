@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morpion Ultime</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- =========================================================
+         Écran de sélection du mode de jeu
+         ========================================================= -->
+    <div class="mode-select-screen" id="modeSelectScreen">
+        <h1 class="title">Morpion <span class="title-highlight">Ultime</span> 🎯</h1>
+        <p class="subtitle">Choisis ton mode de jeu</p>
+        <div class="mode-buttons">
+            <button class="mode-btn" id="btn2Players">
+                <span class="mode-icon">👥</span>
+                <span class="mode-name">2 Joueurs</span>
+                <span class="mode-desc">Hotseat local</span>
+            </button>
+            <button class="mode-btn" id="btnVsAI">
+                <span class="mode-icon">🤖</span>
+                <span class="mode-name">Contre l'IA</span>
+                <span class="mode-desc">Niveaux de difficulté</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         Conteneur du jeu (caché au démarrage)
+         ========================================================= -->
+    <div class="container" id="gameContainer" style="display: none;">
+        <!-- Barre supérieure : scores + statut -->
+        <div class="top-bar">
+            <div class="scores-panel" id="scoresPanel">
+                <div class="score-item">
+                    <span class="score-label score-x">X</span>
+                    <span class="score-value" id="scoreX">0</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-label score-draw">N</span>
+                    <span class="score-value" id="scoreDraw">0</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-label score-o">O</span>
+                    <span class="score-value" id="scoreO">0</span>
+                </div>
+                <!-- Win Streak (visible en permanence) -->
+                <div class="score-item streak-item">
+                    <span class="score-label streak-label" id="streakLabel">Série</span>
+                    <span class="score-value streak-value" id="streakDisplay"></span>
+                </div>
+                <button class="reset-btn" id="resetBtn" title="Réinitialiser les scores">
+                    🗑️
+                </button>
+                <button class="stats-btn" id="statsBtn" title="Statistiques détaillées">
+                    📊
+                </button>
+            </div>
+            <div class="status-area">
+                <!-- Boutons de contrôle -->
+                <div class="controls-row">
+                    <button class="mode-toggle" id="modeToggle">
+                        ⚙️ Changer le mode
+                    </button>
+                    <button class="sound-toggle" id="soundToggle" title="Activer / Désactiver le son">
+                        🔊
+                    </button>
+                    <button class="theme-toggle" id="themeToggle" title="Changer de thème">
+                        🎨
+                    </button>
+                </div>
+                <!-- Sélecteur de difficulté (visible uniquement en mode IA) -->
+                <div class="difficulty-selector" id="difficultySelector" style="display: none;">
+                    <button class="diff-btn" data-diff="easy" id="btnEasy">😊 Facile</button>
+                    <button class="diff-btn" data-diff="medium" id="btnMedium">🤔 Moyen</button>
+                    <button class="diff-btn" data-diff="hard" id="btnHard">💀 Imbattable</button>
+                </div>
+                <!-- Indicateur de niveau (message temporaire) -->
+                <div class="difficulty-indicator" id="difficultyIndicator">
+                    <span class="diff-label" id="diffLabel"></span>
+                </div>
+                <div class="status-bar" id="statusBar">
+                    <span class="player-indicator" id="playerIndicator">
+                        <span class="symbol-display" id="currentSymbol">X</span>
+                        <span class="label">est en jeu</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grille de jeu 3x3 -->
+        <div class="game-board" id="gameBoard">
+            <div class="cell" data-index="0" tabindex="0"></div>
+            <div class="cell" data-index="1" tabindex="0"></div>
+            <div class="cell" data-index="2" tabindex="0"></div>
+            <div class="cell" data-index="3" tabindex="0"></div>
+            <div class="cell" data-index="4" tabindex="0"></div>
+            <div class="cell" data-index="5" tabindex="0"></div>
+            <div class="cell" data-index="6" tabindex="0"></div>
+            <div class="cell" data-index="7" tabindex="0"></div>
+            <div class="cell" data-index="8" tabindex="0"></div>
+        </div>
+
+        <!-- Conteneur de confettis -->
+        <div class="confetti-container" id="confettiContainer"></div>
+
+        <!-- Message de résultat -->
+        <div class="result-message" id="resultMessage"></div>
+
+        <!-- Bouton Rejouer -->
+        <button class="restart-btn" id="restartBtn" style="display: none;">
+            🔄 Rejouer
+        </button>
+    </div>
+
+    <!-- =========================================================
+         Modal de confirmation pour changement de mode
+         ========================================================= -->
+    <div class="modal-overlay" id="modalOverlay" style="display: none;">
+        <div class="modal">
+            <h2>Changer de mode ?</h2>
+            <p>La partie en cours sera réinitialisée. Les scores seront conservés.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="btnCancelMode">Annuler</button>
+                <button class="modal-btn confirm" id="btnConfirmMode">Changer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmation pour reset des scores -->
+    <div class="modal-overlay" id="resetModalOverlay" style="display: none;">
+        <div class="modal">
+            <h2>🗑️ Réinitialiser les scores ?</h2>
+            <p>Tous les scores et statistiques seront remis à zéro.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="btnCancelReset">Annuler</button>
+                <button class="modal-btn confirm" id="btnConfirmReset" style="background: linear-gradient(135deg, #f06464, #e04040);">Réinitialiser</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         Modal Statistiques détaillées
+         ========================================================= -->
+    <div class="modal-overlay" id="statsModalOverlay" style="display: none;">
+        <div class="modal modal-stats">
+            <h2>📊 Statistiques</h2>
+            <div class="stats-content">
+                <!-- Résumé global -->
+                <div class="stats-section">
+                    <h3>🎮 Parties jouées</h3>
+                    <div class="stats-total" id="statsTotal">0</div>
+                </div>
+                <!-- Scores avec pourcentages -->
+                <div class="stats-section">
+                    <h3>📈 Résultats</h3>
+                    <div class="stats-bar-container">
+                        <div class="stats-bar-row">
+                            <span class="stats-bar-label stat-x">X</span>
+                            <div class="stats-bar-track">
+                                <div class="stats-bar-fill stat-x-fill" id="barX"></div>
+                            </div>
+                            <span class="stats-bar-value" id="valX">0 (0%)</span>
+                        </div>
+                        <div class="stats-bar-row">
+                            <span class="stats-bar-label stat-draw">N</span>
+                            <div class="stats-bar-track">
+                                <div class="stats-bar-fill stat-draw-fill" id="barDraw"></div>
+                            </div>
+                            <span class="stats-bar-value" id="valDraw">0 (0%)</span>
+                        </div>
+                        <div class="stats-bar-row">
+                            <span class="stats-bar-label stat-o">O</span>
+                            <div class="stats-bar-track">
+                                <div class="stats-bar-fill stat-o-fill" id="barO"></div>
+                            </div>
+                            <span class="stats-bar-value" id="valO">0 (0%)</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Série de victoires -->
+                <div class="stats-section">
+                    <h3>🔥 Meilleure série</h3>
+                    <div class="stats-streak" id="statsStreak">
+                        <span class="streak-value">0</span>
+                        <span class="streak-label">victoires d'affilée</span>
+                    </div>
+                </div>
+                <!-- Stats IA par difficulté -->
+                <div class="stats-section" id="statsAISec" style="display: none;">
+                    <h3>🤖 Performance contre l'IA</h3>
+                    <div class="stats-ai-grid">
+                        <div class="stat-ai-card">
+                            <span class="stat-ai-diff">😊 Facile</span>
+                            <span class="stat-ai-wins" id="aiEasyWins">0</span>
+                            <span class="stat-ai-rate" id="aiEasyRate">0%</span>
+                        </div>
+                        <div class="stat-ai-card">
+                            <span class="stat-ai-diff">🤔 Moyen</span>
+                            <span class="stat-ai-wins" id="aiMediumWins">0</span>
+                            <span class="stat-ai-rate" id="aiMediumRate">0%</span>
+                        </div>
+                        <div class="stat-ai-card">
+                            <span class="stat-ai-diff">💀 Imbattable</span>
+                            <span class="stat-ai-wins" id="aiHardWins">0</span>
+                            <span class="stat-ai-rate" id="aiHardRate">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Historique des dernières parties -->
+                <div class="stats-section" id="statsHistorySec">
+                    <h3>📜 Dernières parties</h3>
+                    <ul class="history-list" id="historyList"></ul>
+                </div>
+            </div>
+            <div class="modal-buttons" style="margin-top: 1rem;">
+                <button class="modal-btn cancel" id="btnCloseStats">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         Modules du jeu (chargés dans l'ordre des dépendances)
+         ========================================================= -->
+    <script src="js/constants.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/effects.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
