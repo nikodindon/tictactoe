@@ -1,66 +1,69 @@
-# 🎯 Morpion Ultime
+# 🎮 TicTac Ultimate
 
-Une version moderne du classique Tic-Tac-Toe, développée en HTML, CSS et JavaScript vanilla.
-Le projet met l’accent sur une interface agréable, une IA configurable et une expérience fluide aussi bien sur desktop que mobile.
+**Une version moderne du classique Tic-Tac-Toe**, développée en HTML, CSS et JavaScript vanilla.
 
+Le projet propose plusieurs modes de jeu, une IA configurable, des statistiques persistantes, des animations soignées ainsi qu’une compatibilité PWA pour une expérience fluide sur desktop et mobile.
+
+![Aperçu TicTac Ultimate](https://via.placeholder.com/1280x720/0f0f1a/667eea?text=TicTac+Ultimate)
+
+> *(Remplace cette image par une capture réelle du jeu après déploiement.)*
 
 ---
 
 # ✨ Fonctionnalités
 
-## 🎮 Modes de jeu
+## 🎯 Modes de jeu
 
-* **2 Joueurs** sur le même appareil
-* **Mode IA** avec plusieurs niveaux :
+* **2 Joueurs** en local
+* **Mode IA** avec 3 niveaux de difficulté :
 
-  * 😊 Facile
-  * 🤔 Moyen
-  * 💀 Imbattable (basé sur l’algorithme Minimax)
+  * 😊 **Facile**
+  * 🤔 **Moyen**
+  * 💀 **Imbattable** (algorithme Minimax)
 
 ---
 
 ## 📊 Statistiques
 
-* Sauvegarde locale des scores
+* Sauvegarde persistante des scores
+* Série de victoires en temps réel
 * Historique des dernières parties
-* Séries de victoires
 * Statistiques par difficulté
+* Meilleure série enregistrée
 
 ---
 
-## 🎨 Interface & Effets
+# 🎨 Interface & Expérience
 
 * Deux thèmes visuels : **Cyber** et **Neon Retro**
-* Animations légères et fluides
-* Effets sonores générés via Web Audio API
-* Interface responsive (mobile & desktop)
-* Effets visuels modernes inspirés du glassmorphism
+* Animations fluides et effets visuels modernes
+* Effets sonores via Web Audio API
+* Interface responsive
+* Design inspiré du glassmorphism
+* Compatible **PWA** (installable comme une application)
 
 ---
 
-# 🎮 Comment jouer
+# 🚀 Jouer en ligne
 
-1. Choisis un mode de jeu
-2. Sélectionne éventuellement la difficulté de l’IA
-3. Clique sur une case pour jouer
-4. Aligne 3 symboles pour gagner la partie
+**▶️ https://nikodindon.github.io/tictactoe/**
 
 ---
 
-# 🚀 Installation
+# 🛠 Installation locale
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/tonusername/morpion-ultime.git
+git clone https://github.com/nikodindon/tictactoe.git
 
 # Entrer dans le dossier
-cd morpion-ultime
+cd tictactoe
 
 # Lancer le serveur local
 python3 server.py
 ```
 
-Puis ouvre ton navigateur à l’adresse :
+Puis ouvrir :
 
 ```txt
 http://localhost:4508
@@ -68,23 +71,25 @@ http://localhost:4508
 
 ---
 
-# 🛠 Technologies utilisées
+# 🧱 Technologies utilisées
 
 * HTML5
 * CSS3
 * JavaScript Vanilla
 * Web Audio API
 * localStorage
-* Serveur HTTP Python simple
+* Service Worker & Manifest (PWA)
 
 ---
 
 # 📁 Structure du projet
 
 ```txt
-morpion-ultime/
+tictactoe/
 ├── index.html
 ├── style.css
+├── manifest.json
+├── sw.js
 ├── server.py
 ├── js/
 │   ├── constants.js
@@ -103,18 +108,33 @@ morpion-ultime/
 
 Le mode “Imbattable” utilise l’algorithme **Minimax** afin de jouer de manière optimale.
 
-Les autres niveaux adaptent volontairement le comportement de l’IA pour proposer des parties plus accessibles ou variées.
+Les autres niveaux adaptent volontairement le comportement de l’IA pour proposer des parties plus accessibles et variées.
+
+---
+
+# 📱 Progressive Web App
+
+Le jeu peut être installé comme une application sur :
+
+* Android
+* iOS
+* Windows
+* macOS
+
+Une fois installé, il reste utilisable hors ligne grâce au cache PWA.
 
 ---
 
 # 📄 Licence
 
-Ce projet est distribué sous licence MIT.
-Tu peux le modifier, le réutiliser ou l’améliorer librement.
+Projet distribué sous licence MIT.
+
+Tu es libre de forker, modifier et réutiliser le projet.
 
 ---
 
-# 🙏 Remerciements
+# 🙏 Crédits
 
-* Merci à Pi Dev pour l’assistance au développement
-* Inspiré des nombreuses variantes modernes du Tic-Tac-Toe
+Développé avec passion en JavaScript vanilla.
+
+Merci à toutes les personnes qui prennent le temps de tester le projet et de partager leurs retours.
