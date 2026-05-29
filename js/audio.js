@@ -1,6 +1,8 @@
 /**
  * audio.js
  * Gestion des sons via l'API Web Audio (oscillateurs).
+ * Version stable : un seul AudioContext global, gestion du suspended state,
+ * et protection contre le spam de sons.
  */
 
 window.AUDIO = (function () {
@@ -8,6 +10,40 @@ window.AUDIO = (function () {
 
     var soundEnabled = true;
     var soundToggleEl = null;
+
+    // ------------------------------------------------------------------
+    // AudioContext global unique
+    // ------------------------------------------------------------------
+
+    var audioCtx = null;
+    var lastSoundTime = 0;
+    var MIN_SOUND_INTERVAL = 50; // ms minimum entre 2 sons (évite le spam)
+
+    /** Initialise / récupère le AudioContext unique */
+    function getContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+    }
+
+    /** Reprend le context s'il est suspended (obligatoire après interaction utilisateur) */
+    function resumeContext() {
+        var ctx = getContext();
+        if (ctx && ctx.state === "suspended") {
+            ctx.resume();
+        }
+    }
+
+    /** Vérifie s'il y a assez de temps depuis le dernier son */
+    function canPlayNow() {
+        var now = Date.now();
+        if (now - lastSoundTime < MIN_SOUND_INTERVAL) {
+            return false;
+        }
+        lastSoundTime = now;
+        return true;
+    }
 
     // ------------------------------------------------------------------
     // Configuration
@@ -34,75 +70,85 @@ window.AUDIO = (function () {
     function playSound(type) {
         if (!soundEnabled) return;
 
-        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var oscillator = audioCtx.createOscillator();
-        var gainNode = audioCtx.createGain();
+        // Resume le context au cas où il serait suspendu
+        resumeContext();
+
+        // Protection contre le spam de sons
+        if (!canPlayNow()) {
+            return;
+        }
+
+        var ctx = getContext();
+
+        // Créer l'oscillateur et le gainNode à partir du context global
+        var oscillator = ctx.createOscillator();
+        var gainNode = ctx.createGain();
 
         oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        gainNode.connect(ctx.destination);
 
         switch (type) {
             case "click":
-                _playClick(audioCtx, oscillator, gainNode);
+                _playClick(ctx, oscillator, gainNode);
                 break;
             case "win":
-                _playWin(audioCtx, oscillator, gainNode);
+                _playWin(ctx, oscillator, gainNode);
                 break;
             case "lose":
-                _playLose(audioCtx, oscillator, gainNode);
+                _playLose(ctx, oscillator, gainNode);
                 break;
             case "draw":
-                _playDraw(audioCtx, oscillator, gainNode);
+                _playDraw(ctx, oscillator, gainNode);
                 break;
         }
     }
 
     /** Son de clic */
-    function _playClick(audioCtx, oscillator, gainNode) {
+    function _playClick(ctx, oscillator, gainNode) {
         oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.08);
-        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.08);
+        oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
+        gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.08);
     }
 
     /** Son de victoire */
-    function _playWin(audioCtx, oscillator, gainNode) {
+    function _playWin(ctx, oscillator, gainNode) {
         oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(523, audioCtx.currentTime);
-        oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
-        oscillator.frequency.setValueAtTime(784, audioCtx.currentTime + 0.2);
-        oscillator.frequency.setValueAtTime(1047, audioCtx.currentTime + 0.3);
-        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.5);
+        oscillator.frequency.setValueAtTime(523, ctx.currentTime);
+        oscillator.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
+        oscillator.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
+        oscillator.frequency.setValueAtTime(1047, ctx.currentTime + 0.3);
+        gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.5);
     }
 
     /** Son de défaite */
-    function _playLose(audioCtx, oscillator, gainNode) {
+    function _playLose(ctx, oscillator, gainNode) {
         oscillator.type = "sawtooth";
-        oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
-        oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.15);
-        oscillator.frequency.setValueAtTime(200, audioCtx.currentTime + 0.3);
-        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime + 0.45);
-        gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.6);
+        oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+        oscillator.frequency.setValueAtTime(300, ctx.currentTime + 0.15);
+        oscillator.frequency.setValueAtTime(200, ctx.currentTime + 0.3);
+        oscillator.frequency.setValueAtTime(150, ctx.currentTime + 0.45);
+        gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.6);
     }
 
     /** Son de match nul */
-    function _playDraw(audioCtx, oscillator, gainNode) {
+    function _playDraw(ctx, oscillator, gainNode) {
         oscillator.type = "triangle";
-        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime + 0.2);
-        gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.4);
+        oscillator.frequency.setValueAtTime(440, ctx.currentTime);
+        oscillator.frequency.setValueAtTime(440, ctx.currentTime + 0.2);
+        gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.4);
     }
 
     // ------------------------------------------------------------------
